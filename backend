@@ -1,0 +1,66 @@
+from flask import Flask, request, jsonify, send_file
+import torch
+import torchaudio
+import whisper
+from mlx_lm import load, generate
+import ChatTTS
+import os
+
+app = Flask(__name__)
+
+# Load the STT model
+stt_model = whisper.load_model("base")
+
+# Load the LLM
+model, tokenizer = load('Qwen/Qwen2-7B-Instruct-MLX', tokenizer_config={"eos_token": "<|im_end|>"})
+
+# Load the TTS model
+chat = ChatTTS.Chat()
+chat.load(compile=True)
+
+@app.route('/api/chat', methods=['POST'])
+def chat_with_audio():
+    try:
+        # Expecting an audio file in the request
+        audio_file = request.files.get('audio')
+        if not audio_file:
+            return jsonify({"error": "No audio file provided"}), 400
+
+        # Save the uploaded file to disk
+        audio_path = "prompt.wav"
+        audio_file.save(audio_path)
+
+        # Step 1: Transcribe audio using Whisper (STT)
+        result = stt_model.transcribe(audio_path)
+        transcription = result["text"]
+
+        # Step 2: Generate response using LLM
+        messages = [
+            {"role": "system", "content": "You are a children expert. You need to respond appropriately to children questions and remarks. Keep it simple and short."},
+            {"role": "user", "content": transcription}
+        ]
+        prompt = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+
+        response = generate(model, tokenizer, prompt=prompt, verbose=True, top_p=0.8, temp=0.7, repetition_penalty=1.05, max_tokens=512)
+        generated_text = response
+
+        # Step 3: Convert text to speech using ChatTTS
+        texts = [generated_text]
+        wavs = chat.infer(texts)
+
+        # Step 4: Save the audio response to a file
+        output_wav_path = "response.wav"
+        torchaudio.save(output_wav_path, torch.from_numpy(wavs[0]).unsqueeze(0), 24000)
+
+        # Send the audio file as a response
+        return send_file(output_wav_path, as_attachment=True)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
