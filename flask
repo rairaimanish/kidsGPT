@@ -1,0 +1,73 @@
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+import whisper
+import torch
+import torchaudio
+from mlx_lm import load, generate
+import ChatTTS
+import os
+
+app = Flask(__name__)
+CORS(app)  # Enable cross-origin requests, needed for communication with React frontend
+
+# Load Whisper model for speech-to-text
+stt_model = whisper.load_model("base")
+
+# Load LLM (Qwen or any other model you're using)
+model, tokenizer = load('Qwen/Qwen2-7B-Instruct-MLX', tokenizer_config={"eos_token": "<|im_end|>"})
+
+# Load TTS (Text-to-Speech) model
+chat = ChatTTS.Chat()
+chat.load(compile=True)  # Set compile to True for better performance
+
+# Folder to store generated audio files
+if not os.path.exists('generated_audio'):
+    os.makedirs('generated_audio')
+
+@app.route('/process_audio', methods=['POST'])
+def process_audio():
+    # Check if the request contains an audio file
+    if 'file' not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+
+    audio_file = request.files['file']
+    audio_path = 'input_audio.wav'
+    audio_file.save(audio_path)
+
+    # Step 1: Speech-to-Text using Whisper
+    result = stt_model.transcribe(audio_path)
+    user_input = result["text"]
+    print(f"Transcribed Text: {user_input}")
+
+    # Step 2: Generate response using LLM
+    messages = [
+        {"role": "system", "content": "You are a children's expert. Respond simply and appropriately."},
+        {"role": "user", "content": user_input}
+    ]
+    prompt_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    response = generate(model, tokenizer, prompt=prompt_text, top_p=0.8, temp=0.7, repetition_penalty=1.05, max_tokens=512)
+    print(f"LLM Response: {response}")
+
+    # Step 3: Convert LLM Response to Speech using TTS
+    tts_texts = [response]
+    wavs = chat.infer(tts_texts)
+    output_wav = f'generated_audio/response.wav'
+    torchaudio.save(output_wav, torch.from_numpy(wavs[0]).unsqueeze(0), 24000)
+
+    # Return both the response text and the audio URL
+    return jsonify({
+        "response_text": response,
+        "audio_url": f"http://localhost:5000/audio/{os.path.basename(output_wav)}"
+    })
+
+@app.route('/audio/<filename>', methods=['GET'])
+def serve_audio(filename):
+    # Serve the generated audio file
+    file_path = os.path.join('generated_audio', filename)
+    if os.path.exists(file_path):
+        return send_file(file_path, mimetype='audio/wav')
+    else:
+        return jsonify({"error": "Audio file not found"}), 404
+
+if __name__ == '__main__':
+    app.run(debug=True)
