@@ -27,23 +27,15 @@ function App() {
     try {
       setIsLoading(true);
 
-      // Send the audio file to Flask backend
-      const response = await axios.post('http://localhost:5000/api/chat', formData, {
-        responseType: 'blob', // Ensure the response is treated as a Blob (audio)
-      });
-
-      // Create a URL for the returned audio file
-      const audioURL = URL.createObjectURL(response.data);
-
-      // Get the transcription of the user's voice input and bot response from Flask
+      // Send the audio file to Flask backend for transcription and response
       const transcriptionResponse = await axios.post('http://localhost:5000/api/chat', formData);
-      const transcriptionText = transcriptionResponse.data.transcription;
+      const { transcription, response_text, audio_url } = transcriptionResponse.data; // Get transcription, response text, and audio URL
 
       // Update the chat messages (first user's input, then bot's response)
       setMessages((prevMessages) => [
         ...prevMessages,
-        { role: 'user', content: transcriptionText },  // User's voice transcription
-        { role: 'bot', content: 'Audio response from the AI', audioSrc: audioURL },  // Bot's audio reply
+        { role: 'user', content: transcription },  // User's voice transcription
+        { role: 'bot', content: response_text, audioSrc: audio_url }  // Bot's text reply and audio link
       ]);
     } catch (error) {
       console.error('Error:', error);
@@ -61,14 +53,14 @@ function App() {
             <div className="message-content">
               {msg.role === 'bot' && msg.audioSrc ? (
                 <>
-                  <p>{msg.content}</p>
+                  <p>{msg.content}</p> {/* Display bot's text response */}
                   <audio controls>
                     <source src={msg.audioSrc} type="audio/wav" />
                     Your browser does not support the audio element.
                   </audio>
                 </>
               ) : (
-                <p>{msg.content}</p>
+                <p>{msg.content}</p> {/* Display user's transcription */}
               )}
             </div>
           </div>
