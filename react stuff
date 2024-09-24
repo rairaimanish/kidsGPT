@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import './App.css';  // Import the custom CSS for styling
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);
-  const [audioSrc, setAudioSrc] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [messages, setMessages] = useState([]);
 
   // Handle file input change
   const handleFileChange = (e) => {
@@ -25,20 +26,25 @@ function App() {
 
     try {
       setIsLoading(true);
-      
+
       // Send the audio file to Flask backend
       const response = await axios.post('http://localhost:5000/api/chat', formData, {
         responseType: 'blob', // Ensure the response is treated as a Blob (audio)
       });
 
-      // Check if the response is a valid Blob
-      console.log('Blob response:', response.data);
-
       // Create a URL for the returned audio file
       const audioURL = URL.createObjectURL(response.data);
-      setAudioSrc(audioURL);
-      console.log('Audio URL:', audioURL);
 
+      // Get the transcription of the user's voice input and bot response from Flask
+      const transcriptionResponse = await axios.post('http://localhost:5000/api/chat', formData);
+      const transcriptionText = transcriptionResponse.data.transcription;
+
+      // Update the chat messages (first user's input, then bot's response)
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { role: 'user', content: transcriptionText },  // User's voice transcription
+        { role: 'bot', content: 'Audio response from the AI', audioSrc: audioURL },  // Bot's audio reply
+      ]);
     } catch (error) {
       console.error('Error:', error);
       alert("There was an error processing your request.");
@@ -48,28 +54,33 @@ function App() {
   };
 
   return (
-    <div className="App">
-      <h1>Audio Chat with Flask</h1>
-      <form onSubmit={handleSubmit}>
+    <div className="chat-container">
+      <div className="chat-box">
+        {messages.map((msg, index) => (
+          <div key={index} className={`message ${msg.role}`}>
+            <div className="message-content">
+              {msg.role === 'bot' && msg.audioSrc ? (
+                <>
+                  <p>{msg.content}</p>
+                  <audio controls>
+                    <source src={msg.audioSrc} type="audio/wav" />
+                    Your browser does not support the audio element.
+                  </audio>
+                </>
+              ) : (
+                <p>{msg.content}</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={handleSubmit} className="input-container">
         <input type="file" accept="audio/*" onChange={handleFileChange} />
-        <button type="submit">Send Audio</button>
+        <button type="submit" disabled={isLoading}>
+          {isLoading ? 'Processing...' : 'Send Audio'}
+        </button>
       </form>
-
-      {isLoading && <p>Processing...</p>}
-
-      {/* Show the returned audio */}
-      {audioSrc && (
-        <div>
-          <h2>Response Audio:</h2>
-          <audio controls>
-            <source src={audioSrc} type="audio/wav" />
-            Your browser does not support the audio element.
-          </audio>
-          <br />
-          {/* Add a link to download the audio if needed */}
-          <a href={audioSrc} download="response.wav">Download Audio</a>
-        </div>
-      )}
     </div>
   );
 }
