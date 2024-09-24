@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import './App.css';  // Import the custom CSS for styling
+import './App.css';  // Ensure the custom CSS file is imported for styling
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);  // New state to track AI processing
 
   // Handle file input change
   const handleFileChange = (e) => {
@@ -26,14 +27,21 @@ function App() {
 
     try {
       setIsLoading(true);
+      setIsProcessing(true);  // Set AI to processing state
 
-      // Step 1: Send the audio file to Flask backend for transcription and response
+      // Step 1: Show the AI is processing in the chat
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { role: 'bot', content: 'Processing...', isTemporary: true }  // Temporary processing message
+      ]);
+
+      // Step 2: Send the audio file to Flask backend for transcription and response
       const transcriptionResponse = await axios.post('http://localhost:5000/api/chat', formData);
       const { transcription, response_text, audio_url } = transcriptionResponse.data;
 
-      // Step 2: Update the chat messages (first user's input, then bot's response)
+      // Step 3: Update the chat messages (first user's input, then bot's response)
       setMessages((prevMessages) => [
-        ...prevMessages,
+        ...prevMessages.filter(msg => !msg.isTemporary),  // Remove the "Processing..." message
         { role: 'user', content: transcription },  // User's voice transcription
         { role: 'bot', content: response_text, audioSrc: `http://localhost:5000${audio_url}` }  // Bot's text reply and audio link
       ]);
@@ -42,6 +50,7 @@ function App() {
       alert("There was an error processing your request.");
     } finally {
       setIsLoading(false);
+      setIsProcessing(false);  // AI has finished processing
     }
   };
 
@@ -52,19 +61,29 @@ function App() {
           <div key={index} className={`message ${msg.role}`}>
             <div className="message-content">
               {msg.role === 'bot' && msg.audioSrc ? (
-                <>
+                // Use a fragment to enclose both <p> and <audio> elements
+                <React.Fragment>
                   <p>{msg.content}</p> {/* Display bot's text response */}
                   <audio controls>
                     <source src={msg.audioSrc} type="audio/wav" />
                     Your browser does not support the audio element.
                   </audio>
-                </>
+                </React.Fragment>
               ) : (
-                <p>{msg.content}</p> {/* Display user's transcription */}
+                <p>{msg.content}</p> {/* Display user's transcription or "Processing..." */}
               )}
             </div>
           </div>
         ))}
+
+        {/* Display the "Processing..." message while AI is processing */}
+        {isProcessing && (
+          <div className="message bot">
+            <div className="message-content">
+              <p>Processing...</p>
+            </div>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="input-container">
