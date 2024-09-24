@@ -27,15 +27,15 @@ function App() {
     try {
       setIsLoading(true);
 
-      // Send the audio file to Flask backend for transcription and response
+      // Step 1: Send the audio file to Flask backend for transcription and response
       const transcriptionResponse = await axios.post('http://localhost:5000/api/chat', formData);
-      const { transcription, response_text, audio_url } = transcriptionResponse.data; // Get transcription, response text, and audio URL
+      const { transcription, response_text, audio_url } = transcriptionResponse.data;
 
-      // Update the chat messages (first user's input, then bot's response)
+      // Step 2: Update the chat messages (first user's input, then bot's response)
       setMessages((prevMessages) => [
         ...prevMessages,
         { role: 'user', content: transcription },  // User's voice transcription
-        { role: 'bot', content: response_text, audioSrc: audio_url }  // Bot's text reply and audio link
+        { role: 'bot', content: response_text, audioSrc: `http://localhost:5000${audio_url}` }  // Bot's text reply and audio link
       ]);
     } catch (error) {
       console.error('Error:', error);
