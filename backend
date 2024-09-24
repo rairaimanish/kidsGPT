@@ -24,21 +24,15 @@ def chat_with_audio():
         # Expecting an audio file in the request
         audio_file = request.files.get('audio')
         if not audio_file:
-            print("No audio file received")  # Debug print
             return jsonify({"error": "No audio file provided"}), 400
-
-        # Log the file details
-        print(f"Received audio file: {audio_file.filename}")
 
         # Save the uploaded file to disk
         audio_path = "prompt.wav"
         audio_file.save(audio_path)
-        print(f"Audio file saved to {audio_path}")
-        
+
         # Step 1: Transcribe audio using Whisper (STT)
         result = stt_model.transcribe(audio_path)
         transcription = result["text"]
-        print(f"Transcription: {transcription}")
 
         # Step 2: Generate response using LLM
         messages = [
@@ -49,25 +43,34 @@ def chat_with_audio():
 
         response = generate(model, tokenizer, prompt=prompt, verbose=True, top_p=0.8, temp=0.7, repetition_penalty=1.05, max_tokens=512)
         generated_text = response
-        print(f"Generated response: {generated_text}")
 
         # Step 3: Convert text to speech using ChatTTS
         texts = [generated_text]
         wavs = chat.infer(texts)
-        print("TTS inference successful")
 
         # Step 4: Save the audio response to a file
         output_wav_path = "response.wav"
         torchaudio.save(output_wav_path, torch.from_numpy(wavs[0]), 24000)
-        print(f"Response audio saved to {output_wav_path}")
 
-        # Step 5: Send the audio file as a response
-        return send_file(output_wav_path, as_attachment=True, mimetype='audio/wav')
+        # Step 5: Return JSON response with transcription, response text, and audio URL
+        return jsonify({
+            "transcription": transcription,
+            "response_text": generated_text,
+            "audio_url": "/api/audio"  # Path to download the audio file
+        })
 
     except Exception as e:
-        # Print the exception to help with debugging
-        print(f"Error: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+# Route to serve the generated audio file
+@app.route('/api/audio', methods=['GET'])
+def get_audio():
+    try:
+        return send_file("response.wav", as_attachment=False, mimetype="audio/wav")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
