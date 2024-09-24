@@ -29,19 +29,19 @@ function App() {
       setIsLoading(true);
       setIsProcessing(true);  // Set AI to processing state
 
-      // Step 1: Show the AI is processing in the chat
+      // Step 1: Add the user's transcription message, then display the "Processing..." bubble
       setMessages((prevMessages) => [
         ...prevMessages,
-        { role: 'bot', content: 'Processing...', isTemporary: true }  // Temporary processing message
+        { role: 'bot', content: 'Processing...', isProcessing: true }  // Temporary processing message
       ]);
 
       // Step 2: Send the audio file to Flask backend for transcription and response
       const transcriptionResponse = await axios.post('http://localhost:5000/api/chat', formData);
       const { transcription, response_text, audio_url } = transcriptionResponse.data;
 
-      // Step 3: Update the chat messages (first user's input, then bot's response)
+      // Step 3: Update the chat messages (replace the "Processing..." message with real response)
       setMessages((prevMessages) => [
-        ...prevMessages.filter(msg => !msg.isTemporary),  // Remove the "Processing..." message
+        ...prevMessages.filter(msg => !msg.isProcessing),  // Remove the "Processing..." message
         { role: 'user', content: transcription },  // User's voice transcription
         { role: 'bot', content: response_text, audioSrc: `http://localhost:5000${audio_url}` }  // Bot's text reply and audio link
       ]);
@@ -70,17 +70,19 @@ function App() {
                   </audio>
                 </React.Fragment>
               ) : (
-                <p>{msg.content}</p> {/* Display user's transcription or "Processing..." */}
+                <p>{msg.content}</p> {/* Display user's transcription */}
               )}
             </div>
           </div>
         ))}
 
-        {/* Display the "Processing..." message while AI is processing */}
+        {/* Show the animated "Processing..." bubble while AI is processing */}
         {isProcessing && (
           <div className="message bot">
-            <div className="message-content">
-              <p>Processing...</p>
+            <div className="message-content typing-indicator">
+              <span className="dot"></span>
+              <span className="dot"></span>
+              <span className="dot"></span>
             </div>
           </div>
         )}
