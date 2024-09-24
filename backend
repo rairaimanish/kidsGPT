@@ -60,7 +60,10 @@ def chat_with_audio():
         return send_file(output_wav_path, as_attachment=True)
 
     except Exception as e:
+        # Print the exception to help with debugging
+        print(f"Error: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
