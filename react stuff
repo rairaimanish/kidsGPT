@@ -1,88 +1,62 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
 
 function App() {
-  const [recording, setRecording] = useState(false);
-  const [audioURL, setAudioURL] = useState('');
-  const [responseText, setResponseText] = useState('');
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [audioSrc, setAudioSrc] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const startRecording = async () => {
-    setRecording(true);
-
-    // Request microphone access
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-    // Set up the MediaRecorder
-    const mediaRecorder = new MediaRecorder(stream);
-    mediaRecorderRef.current = mediaRecorder;
-
-    // When data becomes available, push it to the audioChunks array
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        audioChunksRef.current.push(event.data);
-      }
-    };
-
-    // Start recording
-    mediaRecorder.start();
+  // Handle file input change
+  const handleFileChange = (e) => {
+    setSelectedFile(e.target.files[0]);
   };
 
-  const stopRecording = () => {
-    setRecording(false);
+  // Handle file upload and get response from the Flask server
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedFile) {
+      alert("Please select an audio file first.");
+      return;
+    }
 
-    const mediaRecorder = mediaRecorderRef.current;
-    mediaRecorder.stop();
+    const formData = new FormData();
+    formData.append('audio', selectedFile);
 
-    mediaRecorder.onstop = async () => {
-      // Combine all the audio chunks into a single Blob
-      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-      audioChunksRef.current = []; // Clear the chunks
+    try {
+      setIsLoading(true);
+      // Send the audio file to Flask backend
+      const response = await axios.post('http://localhost:5000/api/chat', formData, {
+        responseType: 'blob', // Important to receive the audio as a Blob
+      });
 
-      // Send the Blob to Flask API
-      const formData = new FormData();
-      formData.append('file', audioBlob, 'recording.wav');
-
-      try {
-        const response = await axios.post('http://localhost:5000/process_audio', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-
-        // Set response text and audio URL
-        setResponseText(response.data.response_text);
-        setAudioURL(response.data.audio_url);
-      } catch (error) {
-        console.error('Error uploading and processing audio:', error);
-      }
-    };
+      // Create a URL for the returned audio file
+      const audioURL = URL.createObjectURL(response.data);
+      setAudioSrc(audioURL);
+    } catch (error) {
+      console.error('Error:', error);
+      alert("There was an error processing your request.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="App">
-      <h1>Children's Expert Chatbot</h1>
+      <h1>Audio Chat with Flask</h1>
+      <form onSubmit={handleSubmit}>
+        <input type="file" accept="audio/*" onChange={handleFileChange} />
+        <button type="submit">Send Audio</button>
+      </form>
 
-      {/* Buttons to start and stop recording */}
-      <button onClick={startRecording} disabled={recording}>
-        Start Recording
-      </button>
-      <button onClick={stopRecording} disabled={!recording}>
-        Stop Recording
-      </button>
+      {isLoading && <p>Processing...</p>}
 
-      {/* Display the chatbot's response */}
-      {responseText && (
-        <div>
-          <h2>Response Text:</h2>
-          <p>{responseText}</p>
-        </div>
-      )}
-
-      {/* Play the audio response */}
-      {audioURL && (
+      {audioSrc && (
         <div>
           <h2>Response Audio:</h2>
-          <audio controls src={audioURL}></audio>
+          <audio controls>
+            <source src={audioSrc} type="audio/wav" />
+            Your browser does not support the audio element.
+          </audio>
         </div>
       )}
     </div>
