@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
 import torch
 import torchaudio
 import whisper
@@ -8,7 +7,6 @@ import ChatTTS
 import os
 
 app = Flask(__name__)
-CORS(app)
 
 # Load the STT model
 stt_model = whisper.load_model("base")
@@ -62,6 +60,39 @@ def respond_with_audio():
         wavs = chat.infer(texts)
 
         # Step 4: Save the audio response to a file
+        output_wav_path = "response.wav"
+        torchaudio.save(output_wav_path, torch.from_numpy(wavs[0]), 24000)
+
+        return jsonify({
+            "response_text": generated_text,
+            "audio_url": "/api/audio"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Step 3: Respond directly to text input (bypassing transcription)
+@app.route('/api/respond_text', methods=['POST'])
+def respond_with_text_input():
+    try:
+        user_input = request.json.get("text")
+        if not user_input:
+            return jsonify({"error": "No text input provided"}), 400
+
+        # Step 1: Generate response using LLM
+        messages = [
+            {"role": "system", "content": "You are a children expert. Respond appropriately."},
+            {"role": "user", "content": user_input}
+        ]
+        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
+        response = generate(model, tokenizer, prompt=prompt, verbose=True, top_p=0.8, temp=0.7, repetition_penalty=1.05, max_tokens=512)
+        generated_text = response
+
+        # Step 2: Convert text to speech using ChatTTS
+        texts = [generated_text]
+        wavs = chat.infer(texts)
+
+        # Step 3: Save the audio response to a file
         output_wav_path = "response.wav"
         torchaudio.save(output_wav_path, torch.from_numpy(wavs[0]), 24000)
 
