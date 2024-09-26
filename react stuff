@@ -42,7 +42,7 @@ function App() {
       // Step 1: Display the user's transcription
       setMessages((prevMessages) => [
         ...prevMessages,
-        { role: 'user', content: transcription }  // User's voice transcription
+        { id: prevMessages.length + 1, role: 'user', content: transcription }  // User's voice transcription
       ]);
 
       // Clear the file input after processing
@@ -75,7 +75,7 @@ function App() {
       // Step 2: Display bot's text and audio response
       setMessages((prevMessages) => [
         ...prevMessages,
-        { role: 'bot', content: response_text, audioSrc: `http://localhost:5000${audio_url}` }  // Bot's text reply and audio link
+        { id: prevMessages.length + 1, role: 'bot', content: response_text, audioSrc: `http://localhost:5000${audio_url}` }  // Bot's text reply and unique audio link
       ]);
     } catch (error) {
       console.error('Error:', error);
@@ -94,7 +94,7 @@ function App() {
       // Step 1: Immediately show the user's typed message
       setMessages((prevMessages) => [
         ...prevMessages,
-        { role: 'user', content: typedInput },  // Display user's typed input immediately
+        { id: prevMessages.length + 1, role: 'user', content: typedInput },  // Display user's typed input immediately
       ]);
 
       // Step 2: Send the typed input directly to the backend for LLM + TTS
@@ -104,7 +104,7 @@ function App() {
       // Step 3: Display bot's text and audio response
       setMessages((prevMessages) => [
         ...prevMessages,
-        { role: 'bot', content: response_text, audioSrc: `http://localhost:5000${audio_url}` }  // Bot's text reply and audio link
+        { id: prevMessages.length + 1, role: 'bot', content: response_text, audioSrc: `http://localhost:5000${audio_url}` }  // Bot's text reply and unique audio link
       ]);
     } catch (error) {
       console.error('Error:', error);
@@ -138,7 +138,7 @@ function App() {
     <div className="chat-container">
       <div className="chat-box">
         {messages.map((msg, index) => (
-          <div key={index} className={`message ${msg.role}`}>
+          <div key={msg.id} className={`message ${msg.role}`}>
             <div className="message-content">
               {msg.role === 'bot' && msg.audioSrc ? (
                 <React.Fragment>
