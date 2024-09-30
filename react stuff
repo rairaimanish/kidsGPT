@@ -1,73 +1,231 @@
-/* Input container for file upload, text input, and send button */
-.input-container {
-  display: flex;
-  justify-content: center;
-  padding: 20px;
-  background-color: white;
-  border-top: 1px solid #ddd;
+import React, { useState, useRef } from 'react';
+import axios from 'axios';
+import '@fortawesome/fontawesome-free/css/all.min.css';
+import './App.css';  // Ensure the custom CSS file is imported for styling
+
+function App() {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [typedInput, setTypedInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);  // Track recording state
+  const [recorder, setRecorder] = useState(null);  // MediaRecorder instance
+  const fileInputRef = useRef(null);  // Ref to clear file input
+
+  // Handle file input change
+  const handleFileChange = (e) => {
+    setSelectedFile(e.target.files[0]);
+    setTypedInput("");  // Clear typed text input when a file is selected
+  };
+
+  // Handle typed input change
+  const handleTypedInputChange = (e) => {
+    setTypedInput(e.target.value);
+    setSelectedFile(null);  // Clear the file input when text is typed
+  };
+
+  // Function to start recording
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      const audioChunks = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        const audioFile = new File([audioBlob], 'recorded_audio.wav');
+        
+        // Send the recorded audio to the backend
+        const formData = new FormData();
+        formData.append('audio', audioFile);
+
+        try {
+          setIsLoading(true);
+
+          const transcriptionResponse = await axios.post('http://localhost:5000/api/transcribe', formData);
+          const { transcription } = transcriptionResponse.data;
+
+          // Display the transcription in the chat
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            { id: prevMessages.length + 1, role: 'user', content: transcription }
+          ]);
+
+          // Send the transcription to the LLM + TTS backend
+          await handleResponse(transcription);
+        } catch (error) {
+          console.error('Error:', error);
+          alert('There was an error processing the recorded audio.');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      setRecorder(mediaRecorder);
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      alert('Unable to access microphone.');
+    }
+  };
+
+  // Function to stop recording
+  const stopRecording = () => {
+    if (recorder) {
+      recorder.stop();
+      setIsRecording(false);
+    }
+  };
+
+  // Step 2: Send the transcription to LLM + TTS
+  const handleResponse = async (transcription) => {
+    if (!transcription) return;
+
+    try {
+      setIsProcessing(true);
+
+      // Send transcription to Flask backend for LLM response + TTS
+      const response = await axios.post('http://localhost:5000/api/respond', { transcription });
+      const { response_text, audio_url } = response.data;
+
+      // Step 2: Display bot's text and audio response
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { id: prevMessages.length + 1, role: 'bot', content: response_text, audioSrc: `http://localhost:5000${audio_url}` }  // Bot's text reply and unique audio link
+      ]);
+    } catch (error) {
+      console.error('Error:', error);
+      alert('There was an error generating the response.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Handle form submit based on input type (audio or text)
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (selectedFile) {
+      const formData = new FormData();
+      formData.append('audio', selectedFile);
+
+      try {
+        setIsLoading(true);
+
+        // Send the audio file to Flask backend for transcription
+        const transcriptionResponse = await axios.post('http://localhost:5000/api/transcribe', formData);
+        const { transcription } = transcriptionResponse.data;
+
+        // Display the transcription in the chat
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          { id: prevMessages.length + 1, role: 'user', content: transcription }
+        ]);
+
+        // Send the transcription to the LLM + TTS backend
+        await handleResponse(transcription);
+      } catch (error) {
+        console.error('Error:', error);
+        alert('There was an error processing the file.');
+      } finally {
+        setIsLoading(false);
+      }
+    } else if (typedInput) {
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { id: prevMessages.length + 1, role: 'user', content: typedInput }
+      ]);
+
+      await handleResponse(typedInput);
+      setTypedInput('');
+    } else {
+      alert('Please provide either an audio file or typed text input.');
+    }
+  };
+
+  return (
+    <div className="chat-container">
+      <div className="chat-box">
+        {messages.map((msg) => (
+          <div key={msg.id} className={`message ${msg.role}`}>
+            <div className="message-content">
+              {msg.role === 'bot' && msg.audioSrc ? (
+                <React.Fragment>
+                  <p>{msg.content}</p> {/* Display bot's text response */}
+                  <audio controls>
+                    <source src={msg.audioSrc} type="audio/wav" />
+                    Your browser does not support the audio element.
+                  </audio>
+                </React.Fragment>
+              ) : (
+                <p>{msg.content}</p> {/* Display user's transcription or typed input */}
+              )}
+            </div>
+          </div>
+        ))}
+
+        {isProcessing && (
+          <div className="message bot">
+            <div className="message-content typing-indicator">
+              <span className="dot"></span>
+              <span className="dot"></span>
+              <span className="dot"></span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <form onSubmit={handleSubmit} className="input-container">
+        {/* Paperclip icon for attaching files */}
+        <button type="button" onClick={() => fileInputRef.current.click()} className="icon-button">
+          <i className="fas fa-paperclip"></i>
+        </button>
+
+        {/* Hidden file input for file attachment */}
+        <input
+          type="file"
+          accept="audio/*"
+          onChange={handleFileChange}
+          ref={fileInputRef}
+          style={{ display: 'none' }}  // Hide the default file input
+        />
+
+        {/* Text input for typing messages */}
+        <input
+          type="text"
+          value={typedInput}
+          onChange={handleTypedInputChange}
+          placeholder="Type your message..."
+          disabled={isLoading || isProcessing}
+        />
+
+        {/* Submit button */}
+        <button type="submit" disabled={isLoading || isProcessing}>
+          {isLoading || isProcessing ? 'Processing...' : 'Send'}
+        </button>
+
+        {/* Microphone icon for recording */}
+        <button
+          type="button"
+          className="icon-button"
+          onMouseDown={startRecording}
+          onMouseUp={stopRecording}
+          onTouchStart={startRecording}
+          onTouchEnd={stopRecording}
+        >
+          <i className={`fas fa-microphone ${isRecording ? 'recording' : ''}`}></i>
+        </button>
+      </form>
+    </div>
+  );
 }
 
-input[type="text"] {
-  flex-grow: 1;
-  margin-right: 10px;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  font-size: 16px;
-}
-
-.icon-button {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  padding: 10px;
-  margin-right: 10px;
-}
-
-.icon-button:focus {
-  outline: none;
-}
-
-button {
-  background-color: #007bff;
-  color: white;
-  padding: 10px 20px;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-button:disabled {
-  background-color: #ccc;
-}
-
-.typing-indicator .dot {
-  width: 8px;
-  height: 8px;
-  background-color: #333;
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 5px;
-  animation: blink 1.4s infinite both;
-}
-
-@keyframes blink {
-  0% {
-    opacity: 0.2;
-  }
-  20% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0.2;
-  }
-}
-
-.typing-indicator .dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-indicator .dot:nth-child(3) {
-  animation-delay: 0.4s;
-}
+export default App;
