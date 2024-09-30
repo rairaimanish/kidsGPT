@@ -16,13 +16,25 @@ input[type="text"] {
   font-size: 16px;
 }
 
+/* Icon button styling */
 .icon-button {
-  background: none;
+  background-color: #007bff;  /* Button background */
+  color: white;  /* Icon color */
   border: none;
+  border-radius: 50%;  /* Circular button */
   font-size: 1.5rem;
   cursor: pointer;
   padding: 10px;
   margin-right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 45px;
+  height: 45px;
+}
+
+.icon-button:hover {
+  background-color: #0056b3;  /* Darker blue on hover */
 }
 
 .icon-button:focus {
