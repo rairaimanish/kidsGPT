@@ -1,13 +1,16 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
+import '@fortawesome/fontawesome-free/css/all.min.css';
 import './App.css';  // Ensure the custom CSS file is imported for styling
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);
-  const [typedInput, setTypedInput] = useState("");  // New state for typed text input
+  const [typedInput, setTypedInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);  // Track recording state
+  const [recorder, setRecorder] = useState(null);  // MediaRecorder instance
   const fileInputRef = useRef(null);  // Ref to clear file input
 
   // Handle file input change
@@ -22,42 +25,63 @@ function App() {
     setSelectedFile(null);  // Clear the file input when text is typed
   };
 
-  // Step 1: Transcribe the audio and display the user's transcription
-  const handleTranscribe = async () => {
-    if (!selectedFile) {
-      alert("Please select an audio file first.");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('audio', selectedFile);
-
+  // Function to start recording
+  const startRecording = async () => {
     try {
-      setIsLoading(true);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      const audioChunks = [];
 
-      // Send the audio file to Flask backend for transcription
-      const transcriptionResponse = await axios.post('http://localhost:5000/api/transcribe', formData);
-      const { transcription } = transcriptionResponse.data;
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
 
-      // Step 1: Display the user's transcription
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { id: prevMessages.length + 1, role: 'user', content: transcription }  // User's voice transcription
-      ]);
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        const audioFile = new File([audioBlob], 'recorded_audio.wav');
+        
+        // Send the recorded audio to the backend
+        const formData = new FormData();
+        formData.append('audio', audioFile);
 
-      // Clear the file input after processing
-      setSelectedFile(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';  // Reset the file input field
-      }
+        try {
+          setIsLoading(true);
 
-      return transcription;  // Return transcription to be used in next step
+          const transcriptionResponse = await axios.post('http://localhost:5000/api/transcribe', formData);
+          const { transcription } = transcriptionResponse.data;
+
+          // Display the transcription in the chat
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            { id: prevMessages.length + 1, role: 'user', content: transcription }
+          ]);
+
+          // Send the transcription to the LLM + TTS backend
+          await handleResponse(transcription);
+        } catch (error) {
+          console.error('Error:', error);
+          alert('There was an error processing the recorded audio.');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      setRecorder(mediaRecorder);
+      mediaRecorder.start();
+      setIsRecording(true);
     } catch (error) {
-      console.error('Error:', error);
-      alert("There was an error processing your request.");
-      return null;
-    } finally {
-      setIsLoading(false);
+      console.error('Error starting recording:', error);
+      alert('Unable to access microphone.');
+    }
+  };
+
+  // Function to stop recording
+  const stopRecording = () => {
+    if (recorder) {
+      recorder.stop();
+      setIsRecording(false);
     }
   };
 
@@ -79,40 +103,9 @@ function App() {
       ]);
     } catch (error) {
       console.error('Error:', error);
-      alert("There was an error generating the response.");
+      alert('There was an error generating the response.');
     } finally {
       setIsProcessing(false);
-    }
-  };
-
-  // Handle direct text input (bypassing transcription)
-  const handleTextResponse = async () => {
-    try {
-      setIsLoading(true);
-      setIsProcessing(true);
-
-      // Step 1: Immediately show the user's typed message
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { id: prevMessages.length + 1, role: 'user', content: typedInput },  // Display user's typed input immediately
-      ]);
-
-      // Step 2: Send the typed input directly to the backend for LLM + TTS
-      const response = await axios.post('http://localhost:5000/api/respond_text', { text: typedInput });
-      const { response_text, audio_url } = response.data;
-
-      // Step 3: Display bot's text and audio response
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { id: prevMessages.length + 1, role: 'bot', content: response_text, audioSrc: `http://localhost:5000${audio_url}` }  // Bot's text reply and unique audio link
-      ]);
-    } catch (error) {
-      console.error('Error:', error);
-      alert("There was an error generating the response.");
-    } finally {
-      setIsLoading(false);
-      setIsProcessing(false);
-      setTypedInput("");  // Clear the typed input field after processing
     }
   };
 
@@ -121,23 +114,47 @@ function App() {
     e.preventDefault();
 
     if (selectedFile) {
-      // Step 1: Transcribe the audio
-      const transcription = await handleTranscribe();
+      const formData = new FormData();
+      formData.append('audio', selectedFile);
 
-      // Step 2: Send transcription to LLM + TTS
-      await handleResponse(transcription);
+      try {
+        setIsLoading(true);
+
+        // Send the audio file to Flask backend for transcription
+        const transcriptionResponse = await axios.post('http://localhost:5000/api/transcribe', formData);
+        const { transcription } = transcriptionResponse.data;
+
+        // Display the transcription in the chat
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          { id: prevMessages.length + 1, role: 'user', content: transcription }
+        ]);
+
+        // Send the transcription to the LLM + TTS backend
+        await handleResponse(transcription);
+      } catch (error) {
+        console.error('Error:', error);
+        alert('There was an error processing the file.');
+      } finally {
+        setIsLoading(false);
+      }
     } else if (typedInput) {
-      // Handle direct text input
-      await handleTextResponse();
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { id: prevMessages.length + 1, role: 'user', content: typedInput }
+      ]);
+
+      await handleResponse(typedInput);
+      setTypedInput('');
     } else {
-      alert("Please provide either an audio file or typed text input.");
+      alert('Please provide either an audio file or typed text input.');
     }
   };
 
   return (
     <div className="chat-container">
       <div className="chat-box">
-        {messages.map((msg, index) => (
+        {messages.map((msg) => (
           <div key={msg.id} className={`message ${msg.role}`}>
             <div className="message-content">
               {msg.role === 'bot' && msg.audioSrc ? (
@@ -167,12 +184,21 @@ function App() {
       </div>
 
       <form onSubmit={handleSubmit} className="input-container">
+        {/* Paperclip icon for attaching files */}
+        <button type="button" onClick={() => fileInputRef.current.click()} className="icon-button">
+          <i className="fas fa-paperclip"></i>
+        </button>
+
+        {/* Hidden file input for file attachment */}
         <input
           type="file"
           accept="audio/*"
           onChange={handleFileChange}
-          ref={fileInputRef}  // Reference to reset file input
+          ref={fileInputRef}
+          style={{ display: 'none' }}  // Hide the default file input
         />
+
+        {/* Text input for typing messages */}
         <input
           type="text"
           value={typedInput}
@@ -180,8 +206,22 @@ function App() {
           placeholder="Type your message..."
           disabled={isLoading || isProcessing}
         />
+
+        {/* Submit button */}
         <button type="submit" disabled={isLoading || isProcessing}>
           {isLoading || isProcessing ? 'Processing...' : 'Send'}
+        </button>
+
+        {/* Microphone icon for recording */}
+        <button
+          type="button"
+          className="icon-button"
+          onMouseDown={startRecording}
+          onMouseUp={stopRecording}
+          onTouchStart={startRecording}
+          onTouchEnd={stopRecording}
+        >
+          <i className={`fas fa-microphone ${isRecording ? 'recording' : ''}`}></i>
         </button>
       </form>
     </div>
