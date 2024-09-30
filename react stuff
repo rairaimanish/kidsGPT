@@ -124,6 +124,7 @@ function App() {
         // Send the transcription to the LLM + TTS backend
         await handleResponse(transcription);
         setAudioFeedback("");  // Clear the feedback after submission
+        clearAudio();  // Allow attaching another file after submission
       } catch (error) {
         console.error('Error:', error);
         alert('There was an error processing the file.');
@@ -210,7 +211,7 @@ function App() {
         )}
 
         {/* Feedback for file attachment or recording */}
-        {audioFeedback && <p className="audio-feedback">{audioFeedback}</p>}
+        {audioFeedback && <div className="audio-feedback">{audioFeedback}</div>}
 
         {/* Text input for typing messages */}
         <input
