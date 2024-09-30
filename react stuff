@@ -11,11 +11,13 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);  // Track recording state
   const [recorder, setRecorder] = useState(null);  // MediaRecorder instance
+  const [audioFeedback, setAudioFeedback] = useState("");  // Feedback for file or recording
   const fileInputRef = useRef(null);  // Ref to clear file input
 
   // Handle file input change
   const handleFileChange = (e) => {
     setSelectedFile(e.target.files[0]);
+    setAudioFeedback("File attached");
     setTypedInput("");  // Clear typed text input when a file is selected
   };
 
@@ -23,6 +25,7 @@ function App() {
   const handleTypedInputChange = (e) => {
     setTypedInput(e.target.value);
     setSelectedFile(null);  // Clear the file input when text is typed
+    setAudioFeedback("");  // Clear feedback when typing starts
   };
 
   // Function to start recording
@@ -42,30 +45,9 @@ function App() {
         const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
         const audioFile = new File([audioBlob], 'recorded_audio.wav');
         
-        // Send the recorded audio to the backend
-        const formData = new FormData();
-        formData.append('audio', audioFile);
-
-        try {
-          setIsLoading(true);
-
-          const transcriptionResponse = await axios.post('http://localhost:5000/api/transcribe', formData);
-          const { transcription } = transcriptionResponse.data;
-
-          // Display the transcription in the chat
-          setMessages((prevMessages) => [
-            ...prevMessages,
-            { id: prevMessages.length + 1, role: 'user', content: transcription }
-          ]);
-
-          // Send the transcription to the LLM + TTS backend
-          await handleResponse(transcription);
-        } catch (error) {
-          console.error('Error:', error);
-          alert('There was an error processing the recorded audio.');
-        } finally {
-          setIsLoading(false);
-        }
+        // Attach the recorded audio file
+        setSelectedFile(audioFile);
+        setAudioFeedback("Recording complete");
       };
 
       setRecorder(mediaRecorder);
@@ -82,6 +64,15 @@ function App() {
     if (recorder) {
       recorder.stop();
       setIsRecording(false);
+    }
+  };
+
+  // Function to clear the attached or recorded audio
+  const clearAudio = () => {
+    setSelectedFile(null);
+    setAudioFeedback("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";  // Reset the file input field
     }
   };
 
@@ -132,6 +123,7 @@ function App() {
 
         // Send the transcription to the LLM + TTS backend
         await handleResponse(transcription);
+        setAudioFeedback("");  // Clear the feedback after submission
       } catch (error) {
         console.error('Error:', error);
         alert('There was an error processing the file.');
@@ -198,6 +190,28 @@ function App() {
           style={{ display: 'none' }}  // Hide the default file input
         />
 
+        {/* Microphone icon for recording */}
+        <button
+          type="button"
+          className="icon-button"
+          onMouseDown={startRecording}
+          onMouseUp={stopRecording}
+          onTouchStart={startRecording}
+          onTouchEnd={stopRecording}
+        >
+          <i className={`fas fa-microphone ${isRecording ? 'recording' : ''}`}></i>
+        </button>
+
+        {/* Clear button */}
+        {audioFeedback && (
+          <button type="button" className="clear-button" onClick={clearAudio}>
+            Clear
+          </button>
+        )}
+
+        {/* Feedback for file attachment or recording */}
+        {audioFeedback && <p className="audio-feedback">{audioFeedback}</p>}
+
         {/* Text input for typing messages */}
         <input
           type="text"
@@ -210,18 +224,6 @@ function App() {
         {/* Submit button */}
         <button type="submit" disabled={isLoading || isProcessing}>
           {isLoading || isProcessing ? 'Processing...' : 'Send'}
-        </button>
-
-        {/* Microphone icon for recording */}
-        <button
-          type="button"
-          className="icon-button"
-          onMouseDown={startRecording}
-          onMouseUp={stopRecording}
-          onTouchStart={startRecording}
-          onTouchEnd={stopRecording}
-        >
-          <i className={`fas fa-microphone ${isRecording ? 'recording' : ''}`}></i>
         </button>
       </form>
     </div>
