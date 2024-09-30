@@ -1,6 +1,7 @@
 /* Input container for file upload, text input, and send button */
 .input-container {
   display: flex;
+  align-items: center;
   justify-content: center;
   padding: 20px;
   background-color: white;
@@ -37,8 +38,24 @@ input[type="text"] {
   background-color: #0056b3;  /* Darker blue on hover */
 }
 
-.icon-button:focus {
-  outline: none;
+.clear-button {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.clear-button:hover {
+  background-color: #c82333;
+}
+
+.audio-feedback {
+  color: green;
+  font-size: 0.9rem;
+  margin-right: 10px;
 }
 
 button {
