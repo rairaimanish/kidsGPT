@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import '@fortawesome/fontawesome-free/css/all.min.css';
-import './App.css';  // Ensure the custom CSS file is imported for styling
+import './App.css';
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -87,10 +87,13 @@ function App() {
       const response = await axios.post('http://localhost:5000/api/respond', { transcription });
       const { response_text, audio_url } = response.data;
 
+      // Generate a unique identifier for each audio message
+      const uniqueAudioSrc = `${audio_url}?${Date.now()}`;  // Ensures each audio URL is unique
+
       // Step 2: Display bot's text and audio response
       setMessages((prevMessages) => [
         ...prevMessages,
-        { id: prevMessages.length + 1, role: 'bot', content: response_text, audioSrc: `http://localhost:5000${audio_url}` }  // Bot's text reply and unique audio link
+        { id: prevMessages.length + 1, role: 'bot', content: response_text, audioSrc: `http://localhost:5000${uniqueAudioSrc}` }  // Bot's text reply and unique audio link
       ]);
     } catch (error) {
       console.error('Error:', error);
