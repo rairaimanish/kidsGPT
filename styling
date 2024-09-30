@@ -54,8 +54,11 @@ input[type="text"] {
 
 .audio-feedback {
   color: green;
-  font-size: 0.9rem;
+  background-color: #e8f5e9;
+  padding: 5px 10px;
+  border-radius: 5px;
   margin-right: 10px;
+  font-weight: bold;
 }
 
 button {
