@@ -47,7 +47,7 @@ def respond_with_audio():
 
         # Step 2: Generate response using LLM
         messages = [
-            {"role": "system", "content": "You are a children expert. Respond appropriately."},
+            {"role": "system", "content": "You are a children expert. Respond appropriately. Keep your answer simple and concise as if speaking to a child. Avoid using any special characters."},
             {"role": "user", "content": transcription}
         ]
         prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -80,7 +80,7 @@ def respond_with_text_input():
 
         # Step 1: Generate response using LLM
         messages = [
-            {"role": "system", "content": "You are a children expert. Respond appropriately."},
+            {"role": "system", "content": ""You are a children expert. Respond appropriately. Keep your answer simple and concise as if speaking to a child. Avoid using any special characters."},
             {"role": "user", "content": user_input}
         ]
         prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
