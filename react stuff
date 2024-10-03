@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import '@fortawesome/fontawesome-free/css/all.min.css';
-import './App.css';
+import './App.css';  // Ensure the custom CSS file is imported for styling
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -87,13 +87,10 @@ function App() {
       const response = await axios.post('http://localhost:5000/api/respond', { transcription });
       const { response_text, audio_url } = response.data;
 
-      // Use unique audio URL to prevent React from caching
-      const uniqueAudioSrc = `${audio_url}?${Date.now()}`; // Use timestamp for uniqueness
-
       // Step 2: Display bot's text and audio response
       setMessages((prevMessages) => [
         ...prevMessages,
-        { id: prevMessages.length + 1, role: 'bot', content: response_text, audioSrc: uniqueAudioSrc }  // Bot's text reply and unique audio link
+        { id: prevMessages.length + 1, role: 'bot', content: response_text, audioSrc: `http://localhost:5000${audio_url}` }  // Bot's text reply and unique audio link
       ]);
     } catch (error) {
       console.error('Error:', error);
@@ -127,7 +124,6 @@ function App() {
         // Send the transcription to the LLM + TTS backend
         await handleResponse(transcription);
         setAudioFeedback("");  // Clear the feedback after submission
-        clearAudio();  // Allow attaching another file after submission
       } catch (error) {
         console.error('Error:', error);
         alert('There was an error processing the file.');
@@ -141,7 +137,7 @@ function App() {
       ]);
 
       await handleResponse(typedInput);
-      setTypedInput('');  // Clear the text input after submission
+      setTypedInput('');
     } else {
       alert('Please provide either an audio file or typed text input.');
     }
@@ -162,7 +158,7 @@ function App() {
                   </audio>
                 </React.Fragment>
               ) : (
-                <p>{msg.content}</p> {/* Display user's transcription or typed input */}
+                <p>{msg.content}</p> 
               )}
             </div>
           </div>
@@ -214,7 +210,7 @@ function App() {
         )}
 
         {/* Feedback for file attachment or recording */}
-        {audioFeedback && <div className="audio-feedback">{audioFeedback}</div>}
+        {audioFeedback && <p className="audio-feedback">{audioFeedback}</p>}
 
         {/* Text input for typing messages */}
         <input
