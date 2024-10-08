@@ -88,20 +88,20 @@ function App() {
       const { response_text } = response.data;
 
       // Step 1: Display bot's text response (no audio yet)
-      const messageId = messages.length + 1;
+      const botMessageId = messages.length + 1;
       setMessages((prevMessages) => [
         ...prevMessages,
-        { id: messageId, role: 'bot', content: response_text, audioSrc: null }  // Bot's text response (without audio)
+        { id: botMessageId, role: 'bot', content: response_text, audioSrc: null }  // Only bot message
       ]);
 
       // Step 2: Fetch the audio from the second API call (TTS generation)
       const audioResponse = await axios.post('http://localhost:5000/api/generate_audio', { response_text });
       const { audio_url } = audioResponse.data;
 
-      // Update the specific bot message with the audio URL
+      // Only update the bot message with the audio URL
       setMessages((prevMessages) =>
         prevMessages.map((msg) =>
-          msg.id === messageId ? { ...msg, audioSrc: `http://localhost:5000${audio_url}` } : msg
+          msg.id === botMessageId && msg.role === 'bot' ? { ...msg, audioSrc: `http://localhost:5000${audio_url}` } : msg
         )
       );
     } catch (error) {
@@ -127,7 +127,7 @@ function App() {
         const transcriptionResponse = await axios.post('http://localhost:5000/api/transcribe', formData);
         const { transcription } = transcriptionResponse.data;
 
-        // Display the transcription in the chat (without audio)
+        // Display the transcription in the chat (user message)
         setMessages((prevMessages) => [
           ...prevMessages,
           { id: prevMessages.length + 1, role: 'user', content: transcription }  // No audio attached to user messages
@@ -144,7 +144,7 @@ function App() {
         setIsLoading(false);
       }
     } else if (typedInput) {
-      // Display the typed text in the chat (without audio)
+      // Display the typed text in the chat (user message)
       setMessages((prevMessages) => [
         ...prevMessages,
         { id: prevMessages.length + 1, role: 'user', content: typedInput }  // No audio attached to user messages
