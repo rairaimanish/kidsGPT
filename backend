@@ -1,5 +1,4 @@
-from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
+from flask import Flask, request, jsonify, session
 import torch
 import torchaudio
 import whisper
@@ -8,7 +7,8 @@ import ChatTTS
 import os
 
 app = Flask(__name__)
-CORS(app)
+app.secret_key = "your_secret_key"  # For session management
+
 # Load the STT model
 stt_model = whisper.load_model("base")
 
@@ -18,6 +18,28 @@ model, tokenizer = load('Qwen/Qwen2-7B-Instruct-MLX', tokenizer_config={"eos_tok
 # Load the TTS model
 chat = ChatTTS.Chat()
 chat.load(compile=True)
+
+# In-memory conversation history store (can be replaced with a database)
+conversation_histories = {}
+
+MAX_MEMORY_SIZE = 5  # Maximum number of messages to remember
+
+def get_conversation_history(session_id):
+    """Retrieve the conversation history for a specific session ID."""
+    if session_id not in conversation_histories:
+        conversation_histories[session_id] = []
+    return conversation_histories[session_id]
+
+def update_conversation_history(session_id, role, content):
+    """Update the conversation history with a new message, limited to MAX_MEMORY_SIZE."""
+    conversation_history = get_conversation_history(session_id)
+    conversation_history.append({"role": role, "content": content})
+    
+    # Limit the conversation history to the last MAX_MEMORY_SIZE messages
+    if len(conversation_history) > MAX_MEMORY_SIZE:
+        conversation_history = conversation_history[-MAX_MEMORY_SIZE:]
+    
+    conversation_histories[session_id] = conversation_history
 
 # Step 1: Transcribe the audio and return transcription
 @app.route('/api/transcribe', methods=['POST'])
@@ -38,25 +60,33 @@ def transcribe_audio():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Step 2: Generate LLM text response first
+# Step 2: Generate LLM response + convert to speech (TTS)
 @app.route('/api/respond', methods=['POST'])
-def respond_with_text():
+def respond_with_audio():
     try:
         transcription = request.json.get("transcription")
         if not transcription:
             return jsonify({"error": "No transcription provided"}), 400
 
-        # Generate response using LLM
-        messages = [
-            {"role": "system", "content": "You are a children expert. Respond appropriately. Keep your answer simple and concise as if speaking to a child. Avoid using any special characters."},
-            {"role": "user", "content": transcription}
-        ]
-        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        # Get session ID for the user
+        session_id = session.get("session_id", str(len(conversation_histories)))
+
+        # Update the conversation history with the user's transcription
+        update_conversation_history(session_id, "user", transcription)
+
+        # Get the full conversation history to pass it to the LLM
+        conversation_history = get_conversation_history(session_id)
+
+        # Step 2: Generate response using LLM with memory
+        prompt = tokenizer.apply_chat_template(conversation_history, tokenize=False, add_generation_prompt=True)
 
         response = generate(model, tokenizer, prompt=prompt, verbose=True, top_p=0.8, temp=0.7, repetition_penalty=1.05, max_tokens=512)
         generated_text = response
 
-        # Return text response only for now
+        # Update the conversation history with the bot's response
+        update_conversation_history(session_id, "bot", generated_text)
+
+        # Return the text response for now (audio generation will be handled separately)
         return jsonify({
             "response_text": generated_text
         })
@@ -101,15 +131,23 @@ def respond_with_text_input():
         if not user_input:
             return jsonify({"error": "No text input provided"}), 400
 
-        # Generate response using LLM
-        messages = [
-            {"role": "system", "content": "You are a children expert. Respond appropriately. Keep your answer simple and concise as if speaking to a child. Avoid using any special characters."},
-            {"role": "user", "content": user_input}
-        ]
-        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        # Get session ID for the user
+        session_id = session.get("session_id", str(len(conversation_histories)))
+
+        # Update the conversation history with the user's input
+        update_conversation_history(session_id, "user", user_input)
+
+        # Get the full conversation history to pass it to the LLM
+        conversation_history = get_conversation_history(session_id)
+
+        # Step 1: Generate response using LLM with memory
+        prompt = tokenizer.apply_chat_template(conversation_history, tokenize=False, add_generation_prompt=True)
 
         response = generate(model, tokenizer, prompt=prompt, verbose=True, top_p=0.8, temp=0.7, repetition_penalty=1.05, max_tokens=512)
         generated_text = response
+
+        # Update the conversation history with the bot's response
+        update_conversation_history(session_id, "bot", generated_text)
 
         return jsonify({
             "response_text": generated_text
