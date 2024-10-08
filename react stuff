@@ -87,18 +87,18 @@ function App() {
       const response = await axios.post('http://localhost:5000/api/respond', { transcription });
       const { response_text } = response.data;
 
-      // Step 1: Display bot's text response
+      // Step 1: Display bot's text response (no audio yet)
       const messageId = messages.length + 1;
       setMessages((prevMessages) => [
         ...prevMessages,
-        { id: messageId, role: 'bot', content: response_text, audioSrc: null }  // Text response only, no audio yet
+        { id: messageId, role: 'bot', content: response_text, audioSrc: null }  // Bot's text response (without audio)
       ]);
 
-      // Step 2: Fetch the audio from the second API call
+      // Step 2: Fetch the audio from the second API call (TTS generation)
       const audioResponse = await axios.post('http://localhost:5000/api/generate_audio', { response_text });
       const { audio_url } = audioResponse.data;
 
-      // Update the specific message with the audio URL when ready
+      // Update the specific bot message with the audio URL
       setMessages((prevMessages) =>
         prevMessages.map((msg) =>
           msg.id === messageId ? { ...msg, audioSrc: `http://localhost:5000${audio_url}` } : msg
@@ -130,7 +130,7 @@ function App() {
         // Display the transcription in the chat (without audio)
         setMessages((prevMessages) => [
           ...prevMessages,
-          { id: prevMessages.length + 1, role: 'user', content: transcription }
+          { id: prevMessages.length + 1, role: 'user', content: transcription }  // No audio attached to user messages
         ]);
 
         // Send the transcription to the LLM + TTS backend
@@ -147,7 +147,7 @@ function App() {
       // Display the typed text in the chat (without audio)
       setMessages((prevMessages) => [
         ...prevMessages,
-        { id: prevMessages.length + 1, role: 'user', content: typedInput }
+        { id: prevMessages.length + 1, role: 'user', content: typedInput }  // No audio attached to user messages
       ]);
 
       await handleResponse(typedInput);  // Send text to LLM
@@ -163,8 +163,8 @@ function App() {
         {messages.map((msg) => (
           <div key={msg.id} className={`message ${msg.role}`}>
             <div className="message-content">
-              <p>{msg.content}</p> {/* Display the bot's text response */}
-              {msg.audioSrc && (  // Only show audio once it's ready, and only for responses
+              <p>{msg.content}</p> {/* Display the message text */}
+              {msg.role === 'bot' && msg.audioSrc && (  // Only show audio for bot responses
                 <audio controls>
                   <source src={msg.audioSrc} type="audio/wav" />
                   Your browser does not support the audio element.
