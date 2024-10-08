@@ -127,7 +127,7 @@ function App() {
         const transcriptionResponse = await axios.post('http://localhost:5000/api/transcribe', formData);
         const { transcription } = transcriptionResponse.data;
 
-        // Display the transcription in the chat
+        // Display the transcription in the chat (without audio)
         setMessages((prevMessages) => [
           ...prevMessages,
           { id: prevMessages.length + 1, role: 'user', content: transcription }
@@ -144,12 +144,13 @@ function App() {
         setIsLoading(false);
       }
     } else if (typedInput) {
+      // Display the typed text in the chat (without audio)
       setMessages((prevMessages) => [
         ...prevMessages,
         { id: prevMessages.length + 1, role: 'user', content: typedInput }
       ]);
 
-      await handleResponse(typedInput);
+      await handleResponse(typedInput);  // Send text to LLM
       setTypedInput('');
     } else {
       alert('Please provide either an audio file or typed text input.');
@@ -163,7 +164,7 @@ function App() {
           <div key={msg.id} className={`message ${msg.role}`}>
             <div className="message-content">
               <p>{msg.content}</p> {/* Display the bot's text response */}
-              {msg.audioSrc && (  // Only show audio once it's ready
+              {msg.audioSrc && (  // Only show audio once it's ready, and only for responses
                 <audio controls>
                   <source src={msg.audioSrc} type="audio/wav" />
                   Your browser does not support the audio element.
