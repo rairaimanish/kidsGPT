@@ -14,7 +14,7 @@ function App() {
   const [audioFeedback, setAudioFeedback] = useState("");  // Feedback for file or recording
   const fileInputRef = useRef(null);  // Ref to clear file input
 
-  // Handle file input change
+  // Handle file input change (when the user uploads an audio file)
   const handleFileChange = (e) => {
     setSelectedFile(e.target.files[0]);
     setAudioFeedback("File attached");
@@ -76,22 +76,34 @@ function App() {
     }
   };
 
-  // Step 2: Send the transcription to LLM + TTS
+  // Step 2: Send the transcription to LLM, handle response, and await TTS audio
   const handleResponse = async (transcription) => {
     if (!transcription) return;
 
     try {
       setIsProcessing(true);
 
-      // Send transcription to Flask backend for LLM response + TTS
+      // Send transcription to Flask backend for LLM response
       const response = await axios.post('http://localhost:5000/api/respond', { transcription });
-      const { response_text, audio_url } = response.data;
+      const { response_text } = response.data;
 
-      // Step 2: Display bot's text and audio response
+      // Step 1: Display bot's text response
+      const messageId = messages.length + 1;
       setMessages((prevMessages) => [
         ...prevMessages,
-        { id: prevMessages.length + 1, role: 'bot', content: response_text, audioSrc: `http://localhost:5000${audio_url}` }  // Bot's text reply and unique audio link
+        { id: messageId, role: 'bot', content: response_text, audioSrc: null }  // Text response only, no audio yet
       ]);
+
+      // Step 2: Fetch the audio from the second API call
+      const audioResponse = await axios.post('http://localhost:5000/api/generate_audio', { response_text });
+      const { audio_url } = audioResponse.data;
+
+      // Update the specific message with the audio URL when ready
+      setMessages((prevMessages) =>
+        prevMessages.map((msg) =>
+          msg.id === messageId ? { ...msg, audioSrc: `http://localhost:5000${audio_url}` } : msg
+        )
+      );
     } catch (error) {
       console.error('Error:', error);
       alert('There was an error generating the response.');
@@ -124,6 +136,7 @@ function App() {
         // Send the transcription to the LLM + TTS backend
         await handleResponse(transcription);
         setAudioFeedback("");  // Clear the feedback after submission
+        clearAudio();  // Allow attaching another file after submission
       } catch (error) {
         console.error('Error:', error);
         alert('There was an error processing the file.');
@@ -149,16 +162,12 @@ function App() {
         {messages.map((msg) => (
           <div key={msg.id} className={`message ${msg.role}`}>
             <div className="message-content">
-              {msg.role === 'bot' && msg.audioSrc ? (
-                <React.Fragment>
-                  <p>{msg.content}</p> {/* Display bot's text response */}
-                  <audio controls>
-                    <source src={msg.audioSrc} type="audio/wav" />
-                    Your browser does not support the audio element.
-                  </audio>
-                </React.Fragment>
-              ) : (
-                <p>{msg.content}</p> 
+              <p>{msg.content}</p> {/* Display the bot's text response */}
+              {msg.audioSrc && (  // Only show audio once it's ready
+                <audio controls>
+                  <source src={msg.audioSrc} type="audio/wav" />
+                  Your browser does not support the audio element.
+                </audio>
               )}
             </div>
           </div>
