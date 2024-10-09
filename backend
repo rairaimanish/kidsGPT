@@ -3,21 +3,56 @@ from flask_cors import CORS
 import torch
 import torchaudio
 import whisper
-from mlx_lm import load, generate
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import ChatTTS
 import os
 
 app = Flask(__name__)
 CORS(app)
+
 # Load the STT model
 stt_model = whisper.load_model("base")
 
-# Load the LLM
-model, tokenizer = load('/Users/johnny/Desktop/rai-test/mlx', tokenizer_config={"eos_token": "<|im_end|>"})
+# Load the LLM model and tokenizer using transformers
+model_name = "Qwen/Qwen2.5-7B-Instruct"
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    torch_dtype="auto",
+    device_map="auto"
+)
+tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 # Load the TTS model
 chat = ChatTTS.Chat()
 chat.load(compile=True)
+
+def generate_llm_response(transcription):
+    # Prepare the messages for the LLM
+    messages = [
+        {"role": "system", "content": "You are a children expert. Respond as if you are talking to a child. Avoid using any special character."},
+        {"role": "user", "content": transcription},
+    ]
+    # Create the input prompt using the tokenizer's template
+    text = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+    # Tokenize the input text for the model
+    model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+    
+    # Generate the response using the LLM
+    generated_ids = model.generate(
+        **model_inputs,
+        max_new_tokens=512,
+    )
+    # Extract the generated tokens, skipping the input tokens
+    generated_ids = [
+        output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+    ]
+    # Decode the generated text
+    response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    return response
 
 # Step 1: Transcribe the audio and return transcription
 @app.route('/api/transcribe', methods=['POST'])
@@ -46,15 +81,8 @@ def respond_with_text():
         if not transcription:
             return jsonify({"error": "No transcription provided"}), 400
 
-        # Generate response using LLM
-        messages = [
-            {"role": "system", "content": "You are a children expert. Respond appropriately. Keep your answer simple and concise as if speaking to a child. Avoid using any special characters."},
-            {"role": "user", "content": transcription}
-        ]
-        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-
-        response = generate(model, tokenizer, prompt=prompt, verbose=True, top_p=0.8, temp=0.7, repetition_penalty=1.05, max_tokens=512)
-        generated_text = response
+        # Generate response using LLM with the updated function
+        generated_text = generate_llm_response(transcription)
 
         # Return text response only for now
         return jsonify({
@@ -101,15 +129,8 @@ def respond_with_text_input():
         if not user_input:
             return jsonify({"error": "No text input provided"}), 400
 
-        # Generate response using LLM
-        messages = [
-            {"role": "system", "content": "You are a children expert. Respond appropriately. Keep your answer simple and concise as if speaking to a child. Avoid using any special characters."},
-            {"role": "user", "content": user_input}
-        ]
-        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-
-        response = generate(model, tokenizer, prompt=prompt, verbose=True, top_p=0.8, temp=0.7, repetition_penalty=1.05, max_tokens=512)
-        generated_text = response
+        # Generate response using LLM with the updated function
+        generated_text = generate_llm_response(user_input)
 
         return jsonify({
             "response_text": generated_text
